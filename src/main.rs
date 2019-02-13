@@ -241,8 +241,6 @@ fn parse_template(node: &parse_wiki_text::Node) -> Result<String, &'static str> 
                                 outpt.push_str(value);
                             } else if value.starts_with("formatnum:") {
                                 outpt.push_str(&value[10..]);
-                            } else {
-                                eprintln!("Discard template: {}", value)
                             }
                         }
                     }

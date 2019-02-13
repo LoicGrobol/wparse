@@ -86,7 +86,6 @@ fn parse_page(
     page: parse_mediawiki_dump::Page,
     config: &parse_wiki_text::Configuration,
 ) -> Result<String, &'static str> {
-    std::fs::write("last.txt", &page.text).expect("Unable to write file");
     eprintln!("=== {} ===", page.title);
     let mut text = page.text;
     text = text.replace("{{fin}}", "|}"); // This is the proof of wikitext evil

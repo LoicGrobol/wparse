@@ -1,11 +1,7 @@
-use bzip2;
-use parse_mediawiki_dump;
-use parse_wiki_text;
-#[macro_use] extern crate lazy_static;
-use regex;
+use lazy_static::lazy_static;
+use rayon::prelude::*;
 
 mod frconfig;
-// use regex;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -99,76 +95,81 @@ fn parse_page(
     return Ok(dedup(&parse_nodes(&result.nodes)));
 }
 
+
 fn parse_nodes(nodes: &[parse_wiki_text::Node]) -> String {
+    nodes.par_iter().map(parse_node).collect::<Vec<String>>().join("")
+}
+
+
+fn parse_node(node: &parse_wiki_text::Node) -> String {
     let mut outpt = String::new();
-    for node in nodes {
-        match node {
-            parse_wiki_text::Node::Text { value, .. } => outpt.push_str(value),
-            parse_wiki_text::Node::ParagraphBreak { .. } => outpt.push_str("\n"),
-            parse_wiki_text::Node::Link { text, .. } => outpt.push_str(parse_nodes(text).as_str()),
-            parse_wiki_text::Node::ExternalLink { nodes, .. } if !nodes.is_empty() => {
-                if let Some((parse_wiki_text::Node::Text { value, .. }, rest)) = nodes.split_first()
-                {
-                    // The first node is of the form `http://example.com some text`
-                    // where the text might be empty
-                    match value.splitn(2, ' ').collect::<Vec<&str>>().split_first() {
-                        Some((_, text)) if !text.is_empty() => outpt.push_str(text[0]),
-                        _ => (),
-                    }
+     match node {
+        parse_wiki_text::Node::Text { value, .. } => outpt.push_str(value),
+        parse_wiki_text::Node::ParagraphBreak { .. } => outpt.push_str("\n"),
+        parse_wiki_text::Node::Link { text, .. } => outpt.push_str(parse_nodes(text).as_str()),
+        parse_wiki_text::Node::ExternalLink { nodes, .. } if !nodes.is_empty() => {
+            if let Some((parse_wiki_text::Node::Text { value, .. }, rest)) = nodes.split_first()
+            {
+                // The first node is of the form `http://example.com some text`
+                // where the text might be empty
+                match value.splitn(2, ' ').collect::<Vec<&str>>().split_first() {
+                    Some((_, text)) if !text.is_empty() => outpt.push_str(text[0]),
+                    _ => (),
+                }
+                outpt.push_str(parse_nodes(rest).as_str());
+            }
+            // FIXME: Other links such as `[https://example.com <nowiki>a</nowiki>]` are ignored for now
+        }
+        parse_wiki_text::Node::Image { text, .. } => {
+            if let Some((parse_wiki_text::Node::Text { value, .. }, rest)) = text.split_first() {
+                outpt.push_str(value.rsplitn(2, '|').next().unwrap());
+                if !rest.is_empty(){
                     outpt.push_str(parse_nodes(rest).as_str());
                 }
-                // FIXME: Other links such as `[https://example.com <nowiki>a</nowiki>]` are ignored for now
+            } else {
+                outpt.push_str(parse_nodes(text).as_str());
             }
-            parse_wiki_text::Node::Image { text, .. } => {
-                if let Some((parse_wiki_text::Node::Text { value, .. }, rest)) = text.split_first() {
-                    outpt.push_str(value.rsplitn(2, '|').next().unwrap());
-                    if !rest.is_empty(){
-                        outpt.push_str(parse_nodes(rest).as_str());
-                    }
-                } else {
-                    outpt.push_str(parse_nodes(text).as_str());
-                }
-                outpt.push_str("\n");
-            }
-            parse_wiki_text::Node::CharacterEntity { character, .. } => outpt.push(*character),
-            parse_wiki_text::Node::UnorderedList { items, .. }
-            | parse_wiki_text::Node::OrderedList { items, .. } => {
-                outpt.push_str("\n");
-                outpt.push_str(
-                    items
-                        .iter()
-                        .map(|item| parse_nodes(&item.nodes))
-                        .collect::<Vec<String>>()
-                        .join("\n")
-                        .as_str(),
-                );
-                outpt.push_str("\n");
-            }
-            parse_wiki_text::Node::DefinitionList { items, .. } => {
-                outpt.push_str("\n");
-                outpt.push_str(
-                    items
-                        .iter()
-                        .map(|item| parse_nodes(&item.nodes))
-                        .collect::<Vec<String>>()
-                        .join("\n")
-                        .as_str(),
-                );
-                outpt.push_str("\n");
-            }
-            parse_wiki_text::Node::Heading { nodes, .. } => {
-                outpt.push_str("\n");
-                outpt.push_str(parse_nodes(&nodes).as_str());
-                outpt.push_str("\n");
-            }
-            parse_wiki_text::Node::Template { .. } => {
-                outpt.push_str(parse_template(node).unwrap().as_str())
-            }
-            _ => (),
+            outpt.push_str("\n");
         }
+        parse_wiki_text::Node::CharacterEntity { character, .. } => outpt.push(*character),
+        parse_wiki_text::Node::UnorderedList { items, .. }
+        | parse_wiki_text::Node::OrderedList { items, .. } => {
+            outpt.push_str("\n");
+            outpt.push_str(
+                items
+                    .iter()
+                    .map(|item| parse_nodes(&item.nodes))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+                    .as_str(),
+            );
+            outpt.push_str("\n");
+        }
+        parse_wiki_text::Node::DefinitionList { items, .. } => {
+            outpt.push_str("\n");
+            outpt.push_str(
+                items
+                    .iter()
+                    .map(|item| parse_nodes(&item.nodes))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+                    .as_str(),
+            );
+            outpt.push_str("\n");
+        }
+        parse_wiki_text::Node::Heading { nodes, .. } => {
+            outpt.push_str("\n");
+            outpt.push_str(parse_nodes(&nodes).as_str());
+            outpt.push_str("\n");
+        }
+        parse_wiki_text::Node::Template { .. } => {
+            outpt.push_str(parse_template(node).unwrap().as_str())
+        }
+        _ => (),
     }
-    return outpt;
+    return outpt
 }
+
 
 fn parse_template(node: &parse_wiki_text::Node) -> Result<String, &'static str> {
     match node {

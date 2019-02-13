@@ -104,6 +104,7 @@ fn parse_nodes(nodes: &[parse_wiki_text::Node]) -> String {
         match node {
             parse_wiki_text::Node::Text { value, .. } => outpt.push_str(value),
             parse_wiki_text::Node::ParagraphBreak { .. } => outpt.push_str("\n"),
+            parse_wiki_text::Node::Link { text, .. } => outpt.push_str(parse_nodes(text).as_str()),
             parse_wiki_text::Node::ExternalLink { nodes, .. } if !nodes.is_empty() => {
                 if let Some((parse_wiki_text::Node::Text { value, .. }, rest)) = nodes.split_first()
                 {
@@ -114,20 +115,20 @@ fn parse_nodes(nodes: &[parse_wiki_text::Node]) -> String {
                         _ => (),
                     }
                     outpt.push_str(parse_nodes(rest).as_str());
+                } else {
+                    panic!("Weird invalid extlink: {:?}", node)
                 }
             }
-            parse_wiki_text::Node::Link { text, .. }
-            | parse_wiki_text::Node::Image { text, .. } => outpt.push_str(
-                text.iter()
-                    .map(|node| match node {
-                        parse_wiki_text::Node::Text { value, .. } => value,
-                        _ => "",
-                    })
-                    .collect::<String>()
-                    .rsplitn(2, '|') // For now images parameters are parsed as text
-                    .next()
-                    .unwrap(),
-            ),
+            parse_wiki_text::Node::Image { text, .. } => {
+                if let Some((parse_wiki_text::Node::Text { value, .. }, rest)) = text.split_first() {
+                    outpt.push_str(value.rsplitn(2, '|').next().unwrap());
+                    if !rest.is_empty(){
+                        outpt.push_str(parse_nodes(rest).as_str());
+                    }
+                } else {
+                    outpt.push_str(parse_nodes(text).as_str());
+                }
+            }
             parse_wiki_text::Node::CharacterEntity { character, .. } => outpt.push(*character),
             parse_wiki_text::Node::UnorderedList { items, .. }
             | parse_wiki_text::Node::OrderedList { items, .. } => {
@@ -157,7 +158,9 @@ fn parse_nodes(nodes: &[parse_wiki_text::Node]) -> String {
                 outpt.push_str(parse_nodes(&nodes).as_str());
                 outpt.push_str("\n");
             }
-            parse_wiki_text::Node::Template { .. } => outpt.push_str(parse_template(node).unwrap().as_str()),
+            parse_wiki_text::Node::Template { .. } => {
+                outpt.push_str(parse_template(node).unwrap().as_str())
+            }
             _ => (),
         }
     }
@@ -241,7 +244,7 @@ fn parse_template(node: &parse_wiki_text::Node) -> Result<String, &'static str> 
                     }
                 }
             }
-        return Ok(outpt)
+            return Ok(outpt);
         }
         _ => Err("Not a template node"),
     }

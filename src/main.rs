@@ -110,7 +110,7 @@ fn parse_nodes(nodes: &[parse_wiki_text::Node]) -> String {
                 {
                     // The first node is of the form `http://example.com some text`
                     // where the text might be empty
-                    match value.splitn(1, ' ').collect::<Vec<&str>>().split_first() {
+                    match value.splitn(2, ' ').collect::<Vec<&str>>().split_first() {
                         Some((_, text)) if !text.is_empty() => outpt.push_str(text[0]),
                         _ => (),
                     }
@@ -125,8 +125,8 @@ fn parse_nodes(nodes: &[parse_wiki_text::Node]) -> String {
                         _ => "",
                     })
                     .collect::<String>()
-                    .rsplitn(1, '|') // For now images parameters are parsed as text
-                    .last()
+                    .rsplitn(2, '|') // For now images parameters are parsed as text
+                    .next()
                     .unwrap(),
             ),
             parse_wiki_text::Node::CharacterEntity { character, .. } => outpt.push(*character),

@@ -137,7 +137,7 @@ fn parse_node(node: &parse_wiki_text::Node) -> String {
             outpt.push_str("\n");
             outpt.push_str(
                 items
-                    .iter()
+                    .par_iter()
                     .map(|item| parse_nodes(&item.nodes))
                     .collect::<Vec<String>>()
                     .join("\n")
@@ -149,7 +149,7 @@ fn parse_node(node: &parse_wiki_text::Node) -> String {
             outpt.push_str("\n");
             outpt.push_str(
                 items
-                    .iter()
+                    .par_iter()
                     .map(|item| parse_nodes(&item.nodes))
                     .collect::<Vec<String>>()
                     .join("\n")

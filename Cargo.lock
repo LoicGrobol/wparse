@@ -249,6 +249,7 @@ name = "wparse"
 version = "0.1.0"
 dependencies = [
  "bzip2 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lazy_static 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parse_mediawiki_dump 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parse_wiki_text 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -1,6 +1,7 @@
 use bzip2;
 use parse_mediawiki_dump;
 use parse_wiki_text;
+#[macro_use] extern crate lazy_static;
 use regex;
 
 mod frconfig;
@@ -115,9 +116,8 @@ fn parse_nodes(nodes: &[parse_wiki_text::Node]) -> String {
                         _ => (),
                     }
                     outpt.push_str(parse_nodes(rest).as_str());
-                } else {
-                    panic!("Weird invalid extlink: {:?}", node)
                 }
+                // FIXME: Other links such as `[https://example.com <nowiki>a</nowiki>]` are ignored for now
             }
             parse_wiki_text::Node::Image { text, .. } => {
                 if let Some((parse_wiki_text::Node::Text { value, .. }, rest)) = text.split_first() {
@@ -128,27 +128,30 @@ fn parse_nodes(nodes: &[parse_wiki_text::Node]) -> String {
                 } else {
                     outpt.push_str(parse_nodes(text).as_str());
                 }
+                outpt.push_str("\n");
             }
             parse_wiki_text::Node::CharacterEntity { character, .. } => outpt.push(*character),
             parse_wiki_text::Node::UnorderedList { items, .. }
             | parse_wiki_text::Node::OrderedList { items, .. } => {
+                outpt.push_str("\n");
                 outpt.push_str(
                     items
                         .iter()
                         .map(|item| parse_nodes(&item.nodes))
                         .collect::<Vec<String>>()
-                        .join(" ")
+                        .join("\n")
                         .as_str(),
                 );
                 outpt.push_str("\n");
             }
             parse_wiki_text::Node::DefinitionList { items, .. } => {
+                outpt.push_str("\n");
                 outpt.push_str(
                     items
                         .iter()
                         .map(|item| parse_nodes(&item.nodes))
                         .collect::<Vec<String>>()
-                        .join(" ")
+                        .join("\n")
                         .as_str(),
                 );
                 outpt.push_str("\n");
@@ -251,6 +254,8 @@ fn parse_template(node: &parse_wiki_text::Node) -> Result<String, &'static str> 
 }
 
 fn dedup(s: &String) -> String {
-    let re = regex::Regex::new(r"\n\s*").unwrap();
+    lazy_static! {
+       static ref re: regex::Regex = regex::Regex::new(r"\n\s*").unwrap();
+    }
     return String::from(re.replace_all(s, "\n"));
 }

@@ -1,5 +1,7 @@
-Parse wikipedia dumps
+Parse wikipedia dumps 
 =====================
+
+[![Build Status](https://travis-ci.com/LoicGrobol/wparse.svg?branch=master)](https://travis-ci.com/LoicGrobol/wparse)
 
 Proper releases coming soon. In the meantime, you can clone this, do a `cargo build --release` then call 
 

@@ -1,5 +1,6 @@
 use lazy_static::lazy_static;
 use rayon::prelude::*;
+use std::borrow::Cow;
 
 mod frconfig;
 
@@ -41,6 +42,7 @@ fn main() {
 
 fn parse_dump(source: impl std::io::BufRead, mut target: impl std::io::Write) {
     let config = frconfig::create_configuration();
+    // TODO: see if that might be parallelized
     for result in parse_mediawiki_dump::parse(source) {
         match result {
             Err(error) => {
@@ -61,9 +63,10 @@ fn parse_dump(source: impl std::io::BufRead, mut target: impl std::io::Write) {
                         Err(error) => {
                             eprintln!("Error: {}", error);
                         }
-                        Ok(raw) => {
+                        Ok(Some(raw)) => {
                             write!(target, "{}", raw).unwrap();
                         }
+                        _ => ()
                     }
                 } else {
                     eprintln!(
@@ -78,11 +81,10 @@ fn parse_dump(source: impl std::io::BufRead, mut target: impl std::io::Write) {
     }
 }
 
-// TODO: skip redirects
 fn parse_page(
     page: parse_mediawiki_dump::Page,
     config: &parse_wiki_text::Configuration,
-) -> Result<String, &'static str> {
+) -> Result<Option<String>, &'static str> {
     eprintln!("=== {} ===", page.title);
     let mut text = page.text;
     text = text.replace("{{fin}}", "|}"); // This is the proof of wikitext evil
@@ -91,36 +93,42 @@ fn parse_page(
     for w in result.warnings {
         eprintln!("{}", w.message)
     }
+    if let Some(parse_wiki_text::Node::Redirect{ .. }) = result.nodes.first(){
+        return Ok(None)
+    }
     // assert!(result.warnings.is_empty());
-    return Ok(dedup(&parse_nodes(&result.nodes)));
+    return Ok(Some(dedup(&parse_nodes(&result.nodes))));
 }
 
 
 fn parse_nodes(nodes: &[parse_wiki_text::Node]) -> String {
-    nodes.par_iter().map(parse_node).collect::<Vec<String>>().join("")
+    nodes.par_iter().filter_map(parse_node).collect::<String>()
 }
 
 
-fn parse_node(node: &parse_wiki_text::Node) -> String {
-    let mut outpt = String::new();
+fn parse_node<'a>(node: &'a parse_wiki_text::Node) -> Option<std::borrow::Cow<'a, str>> {
      match node {
-        parse_wiki_text::Node::Text { value, .. } => outpt.push_str(value),
-        parse_wiki_text::Node::ParagraphBreak { .. } => outpt.push_str("\n"),
-        parse_wiki_text::Node::Link { text, .. } => outpt.push_str(parse_nodes(text).as_str()),
-        parse_wiki_text::Node::ExternalLink { nodes, .. } if !nodes.is_empty() => {
-            if let Some((parse_wiki_text::Node::Text { value, .. }, rest)) = nodes.split_first()
-            {
-                // The first node is of the form `http://example.com some text`
-                // where the text might be empty
-                match value.splitn(2, ' ').collect::<Vec<&str>>().split_first() {
-                    Some((_, text)) if !text.is_empty() => outpt.push_str(text[0]),
-                    _ => (),
-                }
-                outpt.push_str(parse_nodes(rest).as_str());
-            }
+        parse_wiki_text::Node::Text { value, .. } => Some(Cow::Borrowed(value)),
+        parse_wiki_text::Node::ParagraphBreak { .. } => Some(Cow::Borrowed("\n")),
+        parse_wiki_text::Node::Link { text, .. } => Some(Cow::Owned(parse_nodes(text))),
             // FIXME: Other links such as `[https://example.com <nowiki>a</nowiki>]` are ignored for now
-        }
+        parse_wiki_text::Node::ExternalLink { nodes, .. } if !nodes.is_empty() =>
+            match nodes.split_first() {
+                Some((parse_wiki_text::Node::Text { value, .. }, rest)) => {
+                    let mut outpt = String::new();
+                    // The first node is of the form `http://example.com some text`
+                    // where the text might be empty
+                    match value.splitn(2, ' ').collect::<Vec<&str>>().split_first() {
+                        Some((_, text)) if !text.is_empty() => outpt.push_str(text[0]),
+                        _ => (),
+                    }
+                    outpt.push_str(parse_nodes(rest).as_str());
+                    return Some(Cow::Owned(outpt));
+                }
+                _ => None,
+            }
         parse_wiki_text::Node::Image { text, .. } => {
+            let mut outpt = String::new();
             if let Some((parse_wiki_text::Node::Text { value, .. }, rest)) = text.split_first() {
                 outpt.push_str(value.rsplitn(2, '|').next().unwrap());
                 if !rest.is_empty(){
@@ -130,10 +138,12 @@ fn parse_node(node: &parse_wiki_text::Node) -> String {
                 outpt.push_str(parse_nodes(text).as_str());
             }
             outpt.push_str("\n");
+            return Some(Cow::Owned(outpt));
         }
-        parse_wiki_text::Node::CharacterEntity { character, .. } => outpt.push(*character),
+        parse_wiki_text::Node::CharacterEntity { character, .. } => Some(Cow::Owned(character.to_string())),
         parse_wiki_text::Node::UnorderedList { items, .. }
         | parse_wiki_text::Node::OrderedList { items, .. } => {
+            let mut outpt = String::new();
             outpt.push_str("\n");
             outpt.push_str(
                 items
@@ -144,8 +154,10 @@ fn parse_node(node: &parse_wiki_text::Node) -> String {
                     .as_str(),
             );
             outpt.push_str("\n");
+            return Some(Cow::Owned(outpt));
         }
         parse_wiki_text::Node::DefinitionList { items, .. } => {
+            let mut outpt = String::new();
             outpt.push_str("\n");
             outpt.push_str(
                 items
@@ -156,18 +168,18 @@ fn parse_node(node: &parse_wiki_text::Node) -> String {
                     .as_str(),
             );
             outpt.push_str("\n");
+            return Some(Cow::Owned(outpt));
         }
-        parse_wiki_text::Node::Heading { nodes, .. } => {
-            outpt.push_str("\n");
-            outpt.push_str(parse_nodes(&nodes).as_str());
-            outpt.push_str("\n");
-        }
-        parse_wiki_text::Node::Template { .. } => {
-            outpt.push_str(parse_template(node).unwrap().as_str())
-        }
-        _ => (),
+        // parse_wiki_text::Node::Heading { nodes, .. } => {
+        //     let mut outpt = String::new();
+        //     outpt.push_str("\n");
+        //     outpt.push_str(parse_nodes(&nodes).as_str());
+        //     outpt.push_str("\n");
+        //     return Some(Cow::Owned(outpt))
+        // }
+        parse_wiki_text::Node::Template { .. } => Some(Cow::Owned(parse_template(node).unwrap())),
+        _ => None,
     }
-    return outpt
 }
 
 

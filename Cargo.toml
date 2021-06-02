@@ -1,6 +1,6 @@
 [package]
 name = "wparse"
-version = "0.2.0"
+version = "0.2.1-alpha.0"
 authors = ["Loïc Grobol <loic.grobol@gmail.com>"]
 description = "Fast parsing of wikipedia dumps"
 license = "MIT"

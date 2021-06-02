@@ -1,13 +1,9 @@
 [package]
 name = "wparse"
-version = "0.1.0"
-authors = ["Loïc Grobol <loic.grobol@inria.fr>"]
-edition = "2018"
+version = "0.2.0"
+authors = ["Loïc Grobol <loic.grobol@gmail.com>"]
 
 [dependencies]
-bzip2 = "0.3.3"
-parse_wiki_text = "0.1.5"
-parse_mediawiki_dump = "0.1.0"
-regex = "1.1.0"
-lazy_static = "1.2.0"
-rayon = "1.0"
+flate2 = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

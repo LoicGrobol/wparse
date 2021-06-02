@@ -2,6 +2,10 @@
 name = "wparse"
 version = "0.2.0"
 authors = ["Loïc Grobol <loic.grobol@gmail.com>"]
+description = "Fast parsing of wikipedia dumps"
+licence = "MIT"
+repository = "https://github.com/LoicGrobol/wparse"
+homepage = "https://github.com/LoicGrobol/wparse"
 
 [dependencies]
 flate2 = "1.0"
